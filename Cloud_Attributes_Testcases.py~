@@ -1,0 +1,59 @@
+import unittest
+from Cloud_Attributes import Cloud_Attributes
+import novaclient.v1_1.client as nvclient
+from credentials import get_nova_creds
+
+
+
+def run_cloud_attributes_tests():
+
+    def test_get_image_list():
+        adapter = Cloud_Attributes()
+        try:
+            image_list = adapter.get_image_list()
+            #print 'Image List :\n',image_list
+        except:
+            print 'UNABLE to find images...'
+
+
+    def test_get_vm_list():
+        adapter = Cloud_Attributes()
+        try:
+            vm_list = adapter.get_vm_list()
+            print 'VM List :\n',vm_list
+        except:
+            print 'UNABLE to find VMs...'
+
+
+    def test_get_running_vm_list():
+        adapter = Cloud_Attributes()
+        try:
+            running_vm_list = adapter.get_vm_list()
+            #print 'Running VM List :\n',running_vm_list
+        except:
+            print 'UNABLE to find VMs...'
+
+
+    def test_get_vm_count():
+        adapter = Cloud_Attributes()
+        try:
+            vm_count = adapter.get_vm_count()
+            #print 'Total number of VMs :\n',vm_count
+        except:
+            print 'UNABLE to find total number of VMs...'
+
+
+    #test_get_image_list()
+    test_get_vm_list()
+    #test_get_running_vm_list()
+    #test_get_vm_count()
+    #test_delete_flavor()
+    
+
+
+run_cloud_attributes_tests()
+
+
+
+
+# Check y here everything is printing twice

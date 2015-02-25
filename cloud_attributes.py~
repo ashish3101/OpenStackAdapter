@@ -1,0 +1,142 @@
+import os
+import time
+import novaclient.v1_1.client as nvclient
+from credentials import get_nova_creds
+import logging
+from vm_adapter import vm_adapter
+from image_adapter import image_adapter
+
+
+class Cloud_Attributes(object):
+    """docstring for Cloud_Attributes"""
+
+    def __init__(self):           
+        """
+        Constructor to create a connection.
+        """
+        logging.basicConfig(filename='openstack.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' , datefmt='%m/%d/%Y %I:%M:%S %p')
+        
+        logging.info('Establishing Connection...')
+        
+        # Connections with novaClient(compute API) --------------------    
+        creds = get_nova_creds()
+        self.nova = nvclient.Client(**creds)
+    
+    
+    # Get Image List -------------------- 
+    def get_image_list(self):          
+        """
+        List images.
+
+        :rtype: : NULL
+        """
+        try:
+        	logging.info('Retrieving the image list.')
+            images = self.nova.images.list(detailed=True)
+            image_list = {}
+            for image in images:
+                image_detail = {}
+                image_detail["id"] = image.id
+                image_detail["name"] = image.name
+                image_detail["status"] = image.status
+                image_list[image.name] = image_detail
+            logging.info('Retrieving the image list with details.')
+            logging.info('The image list with details is : \n', image_list)
+        except:
+            logging.error('The image list cant be retrieved.')
+            
+
+    # Get list of all VM -------------------- 
+    def get_vm_list(self):
+        """
+        List of all instances.
+
+        :rtype: NULL 
+        """
+        try:
+        	logging.info('Retrieving the image list.')
+            vms = self.nova.servers.list()
+            vm_list = {}
+            for vm in vms:
+                vm_detail = {}
+                vm_detail['VM Instance NAME'] = str(vm.name)
+                vm_detail['VM Instance ID'] = str(vm.id)
+                vm_detail['VM Instance STATUS'] = str(vm.status)
+                vm_list[vm.name] = vm_detail
+                logging.info('Retrieving the VM list with details.')
+                logging.info('The VM list with details is : \n', image_list)
+        except:
+            logging.error('The VM list cant be retrieved.')
+            
+
+
+    # Get list of all running VMs -------------------- 
+    def get_running_vm_list(self):
+        """
+        List of all running instances.
+
+        :rtype: NULL 
+        """
+        try:
+        	logging.info('Retrieving the RUNNING VM list.')
+            vms = self.nova.servers.list()
+            vm_list = {}
+            for vm in vms:
+                if vm.status == 'ACTIVE':
+                    vm_detail = {}
+                    vm_detail['VM Instance Name'] = str(vm.name)    
+                    vm_detail['VM Instance ID'] = str(vm.id) 
+                    vm_detail['VM Instance Status'] = str(vm.status) 
+                    vm_list[str(vm.name)] = vm_detail 
+            logging.info('Retrieving the RUNNING VM list with details.')
+            logging.info('The RUNNING VM list with details is : \n', image_list)
+        except:
+            logging.error('The RUNNING VM list cant be retrieved.')
+
+
+    # Get count of VM --------------------  
+    def get_count_vm(self):
+        """
+        Get total number of instances.
+
+        :rtype: int: Number of instance.
+        """
+        try:
+        	logging.info('Retrieving the total no. of VMs present(count).')
+            vm_list = self.nova.servers.list()
+            vm_count = len(vm_list)
+            logging.info('Total number of VMs present are : ', vm_count)
+        except:
+            logging.error('The RUNNING VM list cant be retrieved.')
+
+
+    # Delete a specific flavor --------------------
+    def delete_flavor(self,delete_flavor):
+        """
+        Delete a flavor.
+
+        :param flavor: The name of the flavor to delete.
+        :rtype: json: NULL 
+        """
+        try:
+        	flavor_list = self.nova.flavors.list()
+            for flavor in flavor_list:
+                if flavor.name == delete_flavor :
+                    delete_flavor_object = self.nova.flavors.get(flavor.id)
+                    self.nova.flavors.delete(delete_flavor_object)
+                    logging.info('Flavor deleted : ', delete_flavor_object)
+                elif flavor.name != delete_flavor :
+                    logging.info('Flavor does not exist.')
+        except:
+                logging.info('Flavor cannot be deleted.')
+             
+
+                       
+
+    # Get os specific image --------------------
+    # Find image of particular specs --------------------
+    # Get available ip range --------------------         
+    # Get max VM's creation limit --------------------
+    # Get resource utilization --------------------    
+
+

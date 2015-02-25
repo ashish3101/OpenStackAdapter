@@ -1,0 +1,177 @@
+import unittest
+from imagescript import imageos
+from vmscript import vmos
+from vm_attributes import vm_attri
+
+logging.basicConfig(filename='eucalyptus.log',level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' , datefmt='%m/%d/%Y %I:%M:%S %p')
+#logging.warning('Connection FAILED : Wrong Cloud IP ')
+#logging.info('Connection Established SUCCESSFULLY...')
+		
+
+class TddInPython(unittest.TestCase):
+    def test_image_create_delete(self):
+        adapter = imageos()
+        prev_image_list = adapter.get_image_list()
+        assert("test" not in prev_image_list)
+        #print "\nPrevious Image List",prev_image_list
+        """
+        Create Image function 
+        """
+        image = adapter.create_image("test")
+        cur_image_list = adapter.get_image_list()
+        assert(image.name in cur_image_list)
+        #print "\nCurrent Image List",cur_image_list
+        """
+        Delete Image function 
+        """
+        adapter.delete_image("test")
+        new_image_list = adapter.get_image_list()
+        assert("test" not in new_image_list)
+        print "\ncreate_image(), delete_image() and get_image_list() function passed"
+    
+
+
+    def test_vm_create_delete(self):
+        adapte = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        prev_vm_list = adapter2.list_vm()
+        assert("testvm" not in prev_vm_list)
+        #print "\nPrevious Instance List : ",prev_vm_list
+        """
+        Create Instance function 
+        """
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        cur_vm_list = adapter2.list_vm()
+        assert("testvm" in cur_vm_list)
+        #print "\nCurrent Instance List",cur_vm_list
+        """
+        Destroy Instance of a function 
+        """
+        adapter1.destroy_vm("testvm")
+        new_vm_list = adapter2.list_vm()
+        assert("test" not in new_vm_list)
+        adapter.delete_image("test")
+        print "\ncreate_vm(), delete_vm() and list_vm()  function passed"
+
+
+    
+    def test_vm_start(self):
+        adapter = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        adapter1.stop_vm("testvm")
+        prev_vm_list = adapter2.list_running_vm()
+        assert("testvm" not in prev_vm_list)
+        #print "\nPrevious Status",instance.status
+        """
+        Start Instance function 
+        """
+        adapter1.start_vm("testvm")
+        cur_vm_list = adapter2.list_running_vm()
+        assert("testvm" in cur_vm_list)
+        #print "\nCurrent Status",instance.status
+        adapter.delete_image("test")
+        adapter1.destroy_vm("testvm")
+        print "\nstart_vm()  function passed"
+
+
+
+    def test_vm_stop(self):
+        adapter = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        prev_vm_list = adapter2.list_running_vm()
+        assert("testvm" in prev_vm_list)
+        #print "\nPrevious Status",instance.status
+        """
+        Stop Instance function 
+        """
+        adapter1.stop_vm("testvm")
+        cur_vm_list = adapter2.list_running_vm()
+        assert("testvm" not in cur_vm_list)
+        #print "\nCurrent Status",instance.status
+        adapter.delete_image("test")
+        adapter1.destroy_vm("testvm")
+        print "\nstop_vm()  function passed"
+    
+
+
+    def test_vm_change_ram(self):
+        adapter = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        prev_ram = adapter2.get_ram("testvm")
+        print "\nPrevious RAM SIZE",prev_ram
+        """
+        Change Ram Size of an Instance function 
+        """
+        adapter1.change_ram("testvm",4096)
+        cur_ram = adapter2.get_ram("testvm")
+        assert (cur_ram == 4096)
+        print "\nNew RAM SIZE",cur_ram        
+        flavor_list = adapter2.get_flavor("testvm")
+        flavor = flavor_list.name
+        adapter.delete_image("test")
+        adapter1.destroy_vm("testvm")
+        #adapter1.delete_flavor(flavor)
+        print "\nget_ram and change_ram() function passed"
+    
+
+
+    def test_vm_change_disk(self):
+        adapter = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        prev_disk = adapter2.get_disk("testvm")
+        print "\nPrevious DISK SIZE",prev_disk
+        """
+        Change Disk Size of an Instance function 
+        """
+        adapter1.change_disk("testvm",4096)
+        cur_disk = adapter2.get_disk("testvm")
+        assert (cur_disk == 4096)
+        print "\nNew DISK SIZE",cur_disk        
+        flavor_list = adapter2.get_flavor("testvm")
+        flavor = flavor_list.name
+        adapter.delete_image("test")
+        adapter1.destroy_vm("testvm")
+        #adapter1.delete_flavor(flavor)
+        print "\nget_disk and change_disk() function passed"
+    
+
+
+    def test_vm_change_flavor(self): ------------------ please write a program for get flavor list
+        adapter = imageos()
+        adapter1 = vmos()
+        adapter2 = vm_attri()
+        image = adapter.create_image("test")
+        instance = adapter1.create_vm("testvm",'test',2048,20,1)
+        flavor = adapter2.get_flavor("testvm")
+        print "\nPrevious Flavor",flavor
+        """
+        Change Flavor of an Instance function 
+        """
+        adapter1.change_flavor("testvm",4096,40,4)
+        flavor = adapter2.get_flavor("testvm")
+        assert (flavor in cur_flavor_list)
+        print "\nNew DISK SIZE",flavor        
+        flavor_list = adapter2.get_flavor("testvm")
+        flavor = flavor_list.name
+        adapter.delete_image("test")
+        adapter1.destroy_vm("testvm")
+        adapter1.delete_flavor(flavor)
+        print "\nget_flavor(), change_flavor() and delete_flavor() function passed"
+    
+
+
+

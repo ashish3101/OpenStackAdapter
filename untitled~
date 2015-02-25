@@ -1,0 +1,65 @@
+
+
+    # Delete a specific flavor --------------------
+    def delete_flavor(self,flavor_delete):
+        """
+        Delete a flavor.
+    
+        :param flavor_delete: The name of the flavor to delete.
+        :rtype: json: NULL 
+        """
+        try:
+            flavor_list = self.nova.flavors.list()
+            for flavor in flavor_list:
+                if flavor.name == flavor_delete :
+                    flavor_delete_object = self.nova.flavors.get(flavor.id)
+                    self.nova.flavors.delete(flavor_delete_object)
+                    logging.info('Flavor deleted : ', flavor_delete_object)
+                elif flavor.name != flavor_delete :
+                    logging.info('Flavor does not exist.')
+        except:
+            logging.info('Flavor cannot be deleted.')
+            raise            
+
+"""
+    # SSH Connection into VM 
+    def connect_to_vm(self):
+
+        """
+        #Create SSH connection into Virtual Machine and performs operation.
+        """
+        try:
+            assert(self.is_instance_present)
+        except:
+            logging.warning('VM Instance does not exist.')
+            raise
+
+        key_path = os.path.join(os.path.expanduser('~/Downloads'), 'key1.private')
+        print key_path
+        logging.info(key_path)
+        #instance = __conn__.get_only_instances(self.instance.id)
+        cmd = boto.manage.cmdshell.sshclient_from_instance(self.instance, key_path, user_name='ubuntu')
+        print cmd
+        logging.info(cmd)
+        status, stdin, stderr = cmd.run('df -h')
+        print stdin
+    """
+
+
+
+def test_ssh(self):
+        try:
+            cloud_adapter = Cloud_Attributes()
+            vm_instance = VM_Adapter('testvm', 'image1', 2048, 20, 1)
+        except:
+            print 'Connection not establised.'   
+            raise               
+        try:
+            vm_instance.ssh()
+            
+            print 'SSH of the VM Instance is successfull.'
+            vm_instance.destroy()
+        except:
+            print 'VM Instance not found.'   
+            vm_instance.destroy()
+            raise

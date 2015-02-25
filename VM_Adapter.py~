@@ -1,0 +1,610 @@
+import os
+import time
+import novaclient.v1_1.client as nvclient
+from credentials import get_nova_creds
+from datetime import date,timedelta
+import logging
+import random
+#from Image_Adapter import Image_Adapter
+
+
+class VM_Adapter(object):
+    """docstring for VM_Adapter"""
+            
+    def __init__(self, vm_name, image_name, vm_ram, vm_disk, vm_vcpus):           
+        """
+        Constructor to create a connection and a VM instance.
+    
+        :param vm_name: The name of the VM instance to create
+        :param image_name: The name of the image through which we create.
+        :param vm_ram: The ram size of the VM instance.
+        :param vm_disk: The disk size of the VM instance.
+        :param vm_vcpus: Number of CPU's required by the VM instance.
+        """
+        logging.basicConfig(filename='openstack.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' , datefmt='%m/%d/%Y %I:%M:%S %p')
+        
+        logging.info('Establishing Connection...')    
+        
+        # Connections with novaClient(compute API) --------------------
+        creds = get_nova_creds()
+        self.nova = nvclient.Client(**creds)
+        self.key_name = 'key_pair1'
+        self.is_instance_present = False
+        
+        # Creating VM instance --------------------                
+        try:
+            logging.info('Waiting for VM instance to CREATE...')
+
+            if not self.nova.keypairs.findall(name=self.key_name):
+                with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as fpubkey:
+                    self.nova.keypairs.create(name=self.key_name, public_key=fpubkey.read())
+            
+            vm_flavor = self.set_flavor(vm_ram, vm_disk, vm_vcpus)
+            image_object = self.nova.images.find(name=image_name)
+            
+            instance = self.nova.servers.create(name=vm_name, image=image_object, flavor=vm_flavor, meta=None, key_name=self.key_name)
+            self.instance = instance
+            
+            while self.instance.status == 'BUILD': #Wait for the VM to boot
+                time.sleep(5)
+                self.instance = self.nova.servers.get(instance.id)
+            logging.info('Instance is now RUNNING...')
+            logging.info('Instance Name : %s', self.instance.name)
+            logging.info('Instance ID : %s', self.instance.id)
+            logging.info('Instance IP : %s', self.instance.networks)
+            self.is_instance_present = True
+        except:
+            logging.error('Instance not CREATED...')
+            raise
+
+    
+    # Set Flavor for VM instance --------------------
+    def set_flavor(self, vm_ram, vm_disk, vm_vcpus):
+        """
+        Set the flavor for a VM instance.
+    
+        :param vm_ram: The ram size of the VM instance.
+        :param vm_disk: The disk size of the VM instance.
+        :param vm_vcpus: Number of CPU's required by the VM instance.
+        :rtype: string: The ID of the flavor.
+        """
+        try:
+            logging.info('Flavor is being set.....')
+            flavor_flag = 0
+            for flavor in self.nova.flavors.list():
+                if (flavor.ram == vm_ram) and (flavor.disk == vm_disk) and (flavor.vcpus == vm_vcpus):
+                    flavor_flag = 1
+                    vm_flavor = flavor.id 
+                    logging.info('Flavor set from the existing flavors.')
+            
+            if flavor_flag == 0:
+                flavor_name = 'flavor_'+str(vm_ram)+'_'+str(vm_disk)+'_'+str(vm_vcpus)
+                flavor = self.nova.flavors.create(name=flavor_name, ram=vm_ram, vcpus=vm_vcpus, disk=vm_disk)
+                vm_flavor = flavor.id
+                logging.info('Flavor set by creating a new flavor.')
+            return vm_flavor
+        except:
+            logging.error('Flavor not creted.')
+            
+    
+    # Destroy VM Instance --------------------
+    def destroy(self):
+        """
+        Destroy(Delete) a VM instance.
+    
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                self.instance.delete()
+                logging.info('Waiting for instance to terminate....')
+                logging.info('Terminated VM Instance IP is %s', self.instance.networks)
+                logging.info('Terminated VM Instance ID is %s', self.instance.id)
+                del self.instance
+                self.is_instance_present = False
+                logging.info('VM Instance has now been terminated.')
+            except:
+                logging.error('VM Instance not terminated.')    
+  
+
+    # Start VM instance -------------------- 
+    def start(self):
+        """
+        Start an instance.
+   
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                if self.instance.status == 'ACTIVE':     
+                    logging.info('%s Instance is already RUNNING', self.instance.id)
+                elif self.instance.status != 'ACTIVE':    
+                    logging.info('Waiting for Instance to Start....')
+                    self.instance.start()
+                    while self.instance.status != 'ACTIVE':    
+                        time.sleep(5)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                    logging.info('Instance has now been started.')
+                    logging.info('Started Instance IP is %s', self.instance.networks)
+                    logging.info('Started Instance ID is %s', self.instance.id)
+            except:
+                logging.error('VM Instance not STARTED.')
+
+
+    # Stop VM instance -------------------- 
+    def stop(self):
+        """
+        Stop an instance.
+
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                if self.instance.status == 'SHUTOFF':
+                    logging.info('%s Instance is already STOPPED', self.instance.id)
+                elif self.instance.status != 'SHUTOFF':
+                    self.instance.stop()
+                    logging.info('Waiting for VM Instance to stop.....')
+                    logging.info('Stopped VM Instance IP is %s', self.instance.networks)
+                    logging.info('Stopped VM Instance ID is %s', self.instance.id)
+                    while self.instance.status != 'SHUTOFF':    
+                        time.sleep(5)
+                        self.instance = self.nova.servers.get(self.instance.id)
+            except:
+                logging.info('VM Instance is not STOPPED(shut off).')
+             
+
+
+    # Suspend VM instance -------------------- 
+    def suspend(self):
+        """
+        Suspend an instance.
+
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                if self.instance.status == 'SUSPENDED':
+                    logging.info('%s Instance is already SUSPENDED', self.instance.id)
+                elif self.instance.status != 'SUSPENDED':
+                    self.instance.suspend()
+                    logging.info('Waiting for VM Instance to suspend.....')
+                    logging.info('Suspended VM Instance IP is %s', self.instance.networks)
+                    logging.info('Suspended VM Instance ID is %s', self.instance.id)
+                    while self.instance.status != 'SUSPENDED':    
+                        time.sleep(5)
+                        self.instance = self.nova.servers.get(self.instance.id)
+            except:
+                logging.info('VM Instance is not SUSPENDED.')
+
+
+
+    # Pause VM instance -------------------- 
+    def pause(self):
+        """
+        Pause an instance.
+
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                if self.instance.status == 'PAUSED':
+                    logging.info('%s Instance is already PAUSED', self.instance.id)
+                elif self.instance.status != 'PAUSED':
+                    self.instance.pause()
+                    logging.info('Waiting for VM Instance to pause.....')
+                    logging.info('Paused VM Instance IP is %s', self.instance.networks)
+                    logging.info('Paused VM Instance ID is %s', self.instance.id)
+                    while self.instance.status != 'PAUSED':    
+                        time.sleep(5)
+                        self.instance = self.nova.servers.get(self.instance.id)
+            except:
+                logging.info('VM Instance is not PAUSED.')
+
+
+    # Validate VM instance ID -------------------- 
+    def validate_vm_id(self):
+        """
+        Check validity of an instance.
+                
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                vm_list = self.nova.servers.list()
+                for vm in vm_list:
+                    logging.info('%s Instance is a VALID Instance.', self.instance.id)
+                    logging.info('VM Instance IP is %s', self.instance.networks)
+                    logging.info('VM Instance ID is %s', self.instance.id)
+            except:
+                logging.info('%s Instance is a INVALID Instance.', self.instance.id)
+                
+
+    # Is Running VM instance -------------------- 
+    def is_running_vm(self):
+        """
+        Check whether instance is running or not.
+
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                if self.instance.status == 'ACTIVE':
+                    logging.info('%s Instance is a RUNNING Instance.', self.instance.id)
+                    logging.info('RUNNING VM Instance IP is %s', self.instance.networks)
+                    logging.info('RUNNING VM Instance ID is %s', self.instance.id)
+                else:
+                    logging.info('%s Instance is a NOT RUNNING Instance.', self.instance.id)
+                    logging.info('NOT RUNNING VM Instance IP is %s', self.instance.networks)
+                    logging.info('NOT RUNNING VM Instance ID is %s', self.instance.id)
+            except:
+                logging.error('%s Instance details are incomplete. Status cant be retrieved.', self.instance.id)
+                
+
+    # Get VM instance IP -------------------- 
+    def get_ip(self):
+        """
+        Get IP of an instance.
+
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                logging.info('VM Instance IP is %s', self.instance.networks)
+                logging.info('VM Instance ID is %s', self.instance.id)
+            except:
+                logging.error('%s Instance details are incomplete. IP cant be retrieved.', self.instance.id)
+                
+
+    # Get RAM Size of a VM instance -------------------- 
+    def get_ram(self):
+        """
+        Get ram size of an instance.
+
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)
+                ram = flavor_object.ram
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance RAM Size is %s', ram)
+            except:
+                logging.error('%s Instance details are incomplete. RAM Size cant be retrieved.', self.instance.id)
+                
+
+    # Get Disk Size of a VM instance -------------------- 
+    def get_disk(self):
+        """
+        Get disk size of an instance.
+
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)
+                disk = flavor_object.disk
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance DISK Size is %s', disk)
+            except:
+                logging.error('%s Instance details are incomplete. DISK Size cant be retrieved.', self.instance.id)
+
+
+    # Get flavor of VM instance -------------------- 
+    def get_flavor(self):
+        """
+        Get flavor of an instance.
+                
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)                
+                flavor = {}
+                flavor['Instance Name'] = str(self.instance.name)    
+                flavor['Instance ID'] = str(self.instance.id)
+                flavor['Flavor Name'] = str(flavor_object.name)  
+                flavor['Flavor ID'] = str(flavor_object.id)  
+                flavor['Ram Size'] = flavor_object.ram  
+                flavor['Disk Size'] = flavor_object.disk  
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance FLAVOR is %s', flavor)
+            except:
+                logging.error('%s Instance details are incomplete. FLAVOR cant be retrieved.', self.instance.id)
+    
+                
+    # Take snapshots of VM instance -------------------- 
+    def snapshot(self, image_name):
+        """
+        Snapshot(create image of the present state of the instance) an instance.
+
+        :param image_name: The name of the image formed.
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:
+                logging.info('Snapshot of %s Instance being created.', self.instance.id)
+                image_id = self.nova.servers.create_image(server=self.instance, image_name=image_name, metadata=None)
+                image_object = self.nova.images.get(image_id)
+                while image_object.status != 'ACTIVE':
+                    time.sleep(5)
+                    image_object = self.nova.images.get(image_id)
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('IMAGE Instance created ID is %s', image_id)
+            except:
+                logging.error('%s Instance details are incomplete. SNAPSHOT cant be created.', self.instance.id)
+
+        
+    # Change RAM size of a VM -------------------- 
+    def change_ram(self, new_ram):
+        """
+        Change ram size (keeping other things same) of an instance.
+
+        :param new_ram: The new ram size to be allocated.
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:     
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)
+                vm_disk = flavor_object.disk
+                vm_vcpus = flavor_object.vcpus
+                
+                new_flavor_id = self.set_flavor(new_ram, vm_disk, vm_vcpus)
+                new_flavor_object = self.nova.flavors.get(new_flavor_id)
+                logging.info('new_flavor_object %s', new_flavor_object)
+                logging.info('new_flavor_id %s', new_flavor_id)
+                
+                self.nova.servers.resize(server=self.instance.id, flavor=new_flavor_object)  
+                while self.instance.status != 'VERIFY_RESIZE':
+                    time.sleep(5)         
+                    logging.info(self.instance.status)
+
+                logging.info('Resizing done',a)
+                logging.info('Resizing done',tyep(a))
+                time.sleep(5)
+                self.instance = self.nova.servers.get(self.instance.id)
+                while self.instance.status == 'VERIFY_RESIZE':
+                    time.sleep(5)         
+                    logging.info('checking for confirmation')
+                    self.nova.servers.confirm_resize(server=self.instance)
+                    time.sleep(5)
+                    self.instance = self.nova.servers.get(self.instance.id)
+                logging.info('confirmation done')
+  
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance FLAVOR is %s', new_flavor_object.name)
+                logging.info('VM Instance RAM Size is %s', new_flavor_object.ram)
+                logging.info('VM Instance DISK Size is %s', new_flavor_object.disk)
+                logging.info('VM Instance VCPUS Size is %s', new_flavor_object.vcpus)
+            except:
+                logging.error('%s Instance details are incomplete. Ram Size cant be changed.', self.instance.id)
+                 
+
+    # Change DISK size of a VM -------------------- 
+    def change_disk(self, new_disk):
+        """
+        Change disk size (keeping other things same) of an instance.
+
+        :param new_disk: The new disk size to be allocated.
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:     
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)
+                vm_ram = flavor_object.ram
+                vm_vcpus = flavor_object.vcpus
+                
+                new_flavor_id = self.set_flavor(vm_ram, new_disk, vm_vcpus)
+                new_flavor_object = self.nova.flavors.get(new_flavor_id)
+                
+                self.nova.servers.resize(self.instance.id, flavor=new_flavor_id)  
+                time.sleep(5)
+                self.instance = self.nova.servers.get(self.instance.id)
+                while self.instance.status != 'ACTIVE':
+                    time.sleep(5)         
+                    self.nova.servers.confirm_resize(self.instance)
+                    time.sleep(5)
+                    self.instance = self.nova.servers.get(self.instance.id)
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance FLAVOR is %s', new_flavor_object.name)
+                logging.info('VM Instance DISK Size is %s', new_flavor_object.disk)
+                logging.info('VM Instance RAM Size is %s', new_flavor_object.ram)
+                logging.info('VM Instance VCPUS Size is %s', new_flavor_object.vcpus)
+            except:
+                logging.error('%s Instance details are incomplete. DISK Size cant be changed.', self.instance.id)
+
+
+    # Change flavor of VM -------------------- 
+    def change_flavor(self, new_ram, new_disk):
+        """
+        Change flavor of an instance.
+
+        :param new_ram: The new ram size to be allocated.
+        :param new_disk: The new disk size to be allocated.
+        :param vcpus: The new vcpus to be allocated.
+        :rtype: NULL 
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:     
+                flavor_id = self.instance.flavor.get('id')
+                flavor_object = self.nova.flavors.get(flavor_id)
+                vm_vcpus = flavor_object.vcpus
+         
+                new_flavor_id = self.set_flavor(new_ram, new_disk, vm_vcpus)
+                new_flavor_object = self.nova.flavors.get(new_flavor_id)
+                
+                self.nova.servers.resize(self.instance.id, flavor=new_flavor_id)  
+                time.sleep(5)
+                self.instance = self.nova.servers.get(self.instance.id)
+                while self.instance.status != 'ACTIVE':
+                    time.sleep(5)         
+                    self.nova.servers.confirm_resize(self.instance)
+                    time.sleep(5)
+                    self.instance = self.nova.servers.get(self.instance.id)
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance FLAVOR is %s', new_flavor_object.name)
+                logging.info('VM Instance DISK Size is %s', new_flavor_object.disk)
+                logging.info('VM Instance RAM Size is %s', new_flavor_object.ram)
+                logging.info('VM Instance VCPUS Size is %s', new_flavor_object.vcpus)
+            except:
+                logging.error('%s Instance details are incomplete. DISK Size cant be changed.', self.instance.id)
+
+
+
+    # Clone VM -------------------- 
+    def clone(self, new_vm_name):
+        """
+        Clone(copy) an instance.
+
+        :param new_vm_name: The name of the copied instance(new).
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:     
+                rand_no = random.randint(1,10)
+                image_name = 'image_'+str(self.instance.name)+'_'+str(rand_no)
+                
+                image_list = self.nova.images.list(detailed=True)
+                for image in image_list:
+                    if image_name == image.name:
+                        rand_no = random.randint(1,10)
+                        image_name = 'image_'+str(self.instance.name)+'_'+str(rand_no)
+                                     
+                image_id = self.nova.servers.create_image(server=self.instance, image_name=image_name, metadata=None)
+                image_object = self.nova.images.get(image_id)
+                while image_object.status != 'ACTIVE':
+                    time.sleep(5)
+                    image_object = self.nova.images.get(image_id)
+                
+                if not self.nova.keypairs.findall(name=self.key_name):
+                    with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as fpubkey:
+                        self.nova.keypairs.create(name=self.key_name, public_key=fpubkey.read())
+ 
+                flavor_id = self.instance.flavor.get('id')
+                
+                new_instance = self.nova.servers.create(name=new_vm_name, image=image_id, flavor=flavor_id, meta=None, key_name=self.key_name)
+                
+                while new_instance.status == 'BUILD':
+                    time.sleep(5)
+                    new_instance = self.nova.servers.get(new_instance.id)
+                logging.info('VM Instance ID is %s', self.instance.id)
+                logging.info('VM Instance IP is %s', self.instance.networks)
+                logging.info('New VM Instance ID is %s', new_instance.id)
+                logging.info('New VM Instance IP %s', new_instance.networks)
+            except:
+                logging.error('%s Instance details are incomplete. VM Clone is not possible.', self.instance.id)
+
+
+
+    # Restart VM -------------------- 
+    def restart(self):
+        """
+        Restart an instance.
+
+        :rtype: NULL
+        """
+        if self.is_instance_present == False:
+            logging.info('VM Instance does not exist.')
+        else:
+            try:     
+                logging.info('Present status of VM Instance is %s', self.instance.status)
+                
+                if self.instance.status == 'ACTIVE':
+                    logging.info('Rebooting an ACTIVE VM Instance')
+                    self.nova.servers.reboot(self.instance,reboot_type='SOFT')
+                    while self.instance.status != 'REBOOT':    
+                        time.sleep(20)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                        logging.info('Waiting for the VM Instance to Reboot')
+                
+                elif self.instance.status == 'PAUSED':
+                    logging.info('Unpausing(Starting) a PAUSED VM Instance')
+                    self.nova.servers.unpause(self.instance)
+                    while self.instance.status != 'ACTIVE':    
+                        time.sleep(20)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                        logging.info('Waiting for the VM Instance to Unpause(Start)')
+                    logging.info('Rebooting an ACTIVE VM Instance')
+                    self.nova.servers.reboot(self.instance,reboot_type='SOFT') 
+                    while self.instance.status != 'REBOOT':    
+                        time.sleep(20)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                        logging.info('Waiting for the VM Instance to Reboot')
+                
+                elif self.instance.status == 'SUSPENDED':
+                    logging.info('Resuming(Starting) a SUSPENDED VM Instance')
+                    self.nova.servers.resume(self.instance)
+                    while self.instance.status != 'ACTIVE':    
+                        time.sleep(20)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                        logging.info('Waiting for the VM Instance to Resume(Start)')
+                    logging.info('Rebooting an ACTIVE VM Instance')
+                    self.nova.servers.reboot(self.instance,reboot_type='SOFT') 
+                    while self.instance.status != 'REBOOT':    
+                        time.sleep(20)
+                        self.instance = self.nova.servers.get(self.instance.id)
+                        logging.info('Waiting for the VM Instance to Reboot')
+            except:
+                logging.error('%s Instance details are incomplete. VM REBOOT is not possible.', self.instance.id)
+
+
+vm_1 = VM_Adapter(vm_name='h1', image_name='image1', vm_ram=2048, vm_disk=20, vm_vcpus=1)
+#vm_1.set_flavor(vm_ram=2000, vm_disk=2, vm_vcpus=1)
+#vm_1.stop() 
+#vm_1.start() 
+#vm_1.restart() 
+#vm_1.suspend()
+#vm_1.restart()
+#vm_1.pause()
+#vm_1.restart()
+#vm_1.validate_vm_id()
+#vm_1.is_running_vm()
+#vm_1.get_ip()
+#vm_1.get_ram()
+#vm_1.get_disk()
+#vm_1.get_flavor()
+#vm_1.snapshot(image_name='image2')
+#vm_1.clone(new_vm_name='clone1')
+#vm_1.destroy()
+
+
+#vm_1.change_ram(new_ram=3000)
+#vm_1.change_disk(new_disk=30)
+#vm_1.change_flavor(new_ram=3000, new_disk=35)

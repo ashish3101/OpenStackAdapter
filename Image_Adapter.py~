@@ -1,0 +1,76 @@
+import os
+import time
+import keystoneclient.v2_0.client as ksclient
+from credentials import get_keystone_creds
+import novaclient.v1_1.client as nvclient
+from credentials import get_nova_creds
+import glanceclient
+import logging
+from os import path
+
+class Image_Adapter(object):
+    """docstring for Image_Adapter"""
+            
+    def __init__(self, image_name, image_path):           
+        """
+        Constructor to create a connection and an IMAGE instance.
+    
+        :param image_name: The name of the image to be created.
+        :param image_path: The path of the image for creation.
+        """
+        logging.basicConfig(filename='openstack.log', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s' , datefmt='%m/%d/%Y %I:%M:%S %p')
+        
+        logging.info('Establishing Connection...')
+        
+        # Connections with keystoneClient(identity API) --------------------
+        creds = get_keystone_creds()
+        self.keystone = ksclient.Client(**creds)
+
+        # Connections with novaClient(compute API) --------------------    
+        creds = get_nova_creds()
+        self.nova = nvclient.Client(**creds)
+    
+        self.is_image_present = False
+        
+        # Creating IMAGE instance --------------------                
+        try:
+            logging.info('Waiting for IMAGE instance to CREATE...')
+            
+            endpoint = self.keystone.service_catalog.url_for(service_type='image', endpoint_type='publicURL')
+            image_config = glanceclient.Client('1', endpoint=endpoint, token=self.keystone.auth_token)
+            
+            logging.info(os.path(image_path))
+            
+            with open(os.path(image_path), 'rb') as fimage:
+                image = image_config.images.create(name=image_name, is_public=True, disk_format="qcow2", container_format="bare", data=fimage)
+            self.image = image
+            self.is_image_present = True
+        except:
+            logging.error('Image not CREATED...')
+            raise
+
+
+    # Delete Image --------------------  
+    def delete(self):
+        """
+        Delete an image.
+        
+        :rtype: NULL
+        """
+        if self.is_image_present == False:
+            logging.info('Image does not exist.')
+        else:
+            try:
+                self.image.delete()   
+                logging.info('Waiting for image to terminate....')
+                logging.info('Terminated Image Name is %s', self.image.name)
+                logging.info('Terminated Image ID is %s', self.image.id)
+                del self.image
+                self.is_image_present = False
+                logging.info('Image has now been terminated.')
+            except:
+                logging.error('Image not terminated.')    
+    
+
+image_1 = image_adapter(image_name='image_1', image_path='/home/openstack/Desktop/precise-server-cloudimg-amd64-disk1.img')
+image_1.delete()

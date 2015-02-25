@@ -1,0 +1,72 @@
+
+    """            
+    # Take snapshots of VM instance -------------------- 
+    def snapshot(self, image_name):
+        """
+        #Snapshot(create image of the present state of the instance) an instance.
+
+        #:param image_name: The name of the image formed.
+        #:rtype: NULL
+        """
+        try:
+            assert(self.is_instance_present)
+        except:
+            logging.warning('VM Instance does not exist.')
+            raise
+        try:
+            logging.info('Snapshot of %s Instance being created.', self.instance.id)
+            image_id = self.nova.servers.create_image(server=self.instance, image_name=image_name, metadata=None)
+            image_object = self.nova.images.get(image_id)
+            logging.info('VM Instance ID is %s', self.instance.id)
+            logging.info('Image Instance created ID is %s', image_id)
+        except:
+            logging.error('%s Instance details are incomplete. Snapshot cant be created.', self.instance.id)
+            raise  
+    
+   
+    # Clone VM -------------------- 
+    def clone(self, new_vm_name):
+        """
+        #Clone(copy) an instance.
+
+        #:param new_vm_name: The name of the copied instance(new).
+        #:rtype: NULL
+        """
+        try:
+            assert(self.is_instance_present)
+        except:
+            logging.warning('VM Instance does not exist.')
+            raise        
+        try:     
+            rand_no = random.randint(1,10)
+            image_name = 'image_'+str(self.instance.name)+'_'+str(rand_no)
+             
+            image_list = self.nova.images.list(detailed=True)
+            for image in image_list:
+                if image_name == image.name:
+                    rand_no = random.randint(1,10)s
+                    image_name = 'image_'+str(self.instance.name)+'_'+str(rand_no)
+                                    
+            image_id = self.nova.servers.create_image(server=self.instance, image_name=image_name, metadata=None)
+            image_object = self.nova.images.get(image_id)
+            while image_object.status != 'ACTIVE':
+                time.sleep(5)
+                image_object = self.nova.images.get(image_id)
+                
+            if not self.nova.keypairs.findall(name=self.key_name):
+                with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as fpubkey:
+                    self.nova.keypairs.create(name=self.key_name, public_key=fpubkey.read())
+ 
+            flavor_id = self.instance.flavor.get('id')
+              
+            new_instance = self.nova.servers.create(name=new_vm_name, image=image_id, flavor=flavor_id, meta=None, key_name=self.key_name)
+                
+            logging.info('VM Instance ID is %s', self.instance.id)
+            logging.info('VM Instance IP is %s', self.instance.networks)
+            logging.info('New VM Instance ID is %s', new_instance.id)
+            logging.info('New VM Instance IP %s', new_instance.networks)
+        except:
+            logging.error('%s Instance details are incomplete. VM Clone is not possible.', self.instance.id)
+            raise  
+    """
+
